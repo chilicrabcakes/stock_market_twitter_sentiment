@@ -10,6 +10,12 @@
 # Does causation matter? If we can imply correlation we can concur that tweet sentiment is a valuable
 # tool for analyzing stock trends. 
 
+# <TODO> 
+# Major problem noticed. Market is closed on weekends. We do an inner join to match stocks and 
+# twitter feeds, which is obviously getting rid of the weekend tweet data. 
+# I'm not sure how to fix this.
+# </TODO>
+
 import pandas as pd 
 import numpy as np
 import twint
@@ -31,15 +37,17 @@ def get_correlation(data, stock_data, start_date, day_difference):
         stock (pd.DataFrame): Stock Ticker data, from yfinance
         start_date (string): Date to get stock prices from
         day_difference (int): The amount of the time-shift (in days)
+
+    out:
+        (float): The value of the correlation
     """
     # Reduces stock DataFrame to only days required
-    stock_data['datetime'] = stock_data.index.apply(lambda y: datetime.strptime(y, '%Y-%m-%d'))
-    stock_data = stock_data[stock_data['datetime'] >= start_date]
+    stock_data = stock_data[stock_data.index >= start_date]
     x = stock_data['Close']
 
     # Creates deep copy of tweets and shifts tweet dates by day_difference
-    data_f = data[['datetime', 'id']].copy(deep=True)
-    data_f['datetime'] = data_f['datetime'] + timedelta(days=day_difference)
+    data_f = data[['date','id']].copy(deep=True)
+    data_f['datetime'] = data_f['date'].apply(lambda x: datetime.strptime(x, '%Y-%m-%d %H:%M:%S')) + timedelta(days=day_difference)
 
     # Strips datetime object into required date format
     data_f['date'] = data_f['datetime'].apply(lambda x: x.strftime("%Y-%m-%d"))
@@ -52,6 +60,23 @@ def get_correlation(data, stock_data, start_date, day_difference):
     return np.corrcoef(num_tweets['id'], num_tweets['Close'])[0, 1]
 
 def process_all_stocks(stock_tickers, start_date, min_likes, shift_range):
+    """
+    process_all_stocks: Over-arching function that downloads tweets, downloads stock prices,
+    and produces correlation for all days in the shift range. This is going to be quite a slow
+    process, depending on the size of data required to download and process. 
+
+    args:
+        stock_tickers (list): List of all stocks to be analyzed by the process
+        start_date (datetime.datetime object): Starting date from which tweets and stock
+                                               ticker data is to be downloaded and processed
+        min_likes (int): Twint search requirement - defines the minimum number of likes 
+                         required for a tweet to be picked up by the scraper
+        shift_range (int): Range of days - [0, shift_range] - the time-shifting is to be
+                           done for.
+    
+    output:
+        (dict): A dictionary containing mappings of stock acronyms to their correlation lists.
+    """
     # Initialize 
     c = twint.Config()
     output = {}
@@ -76,6 +101,14 @@ def process_all_stocks(stock_tickers, start_date, min_likes, shift_range):
         twint.run.Search(c)
         data = twint.storage.panda.Tweets_df
 
+        # Calculate sentiment and keep ONLY positive tweets
+        data['tweet_sentiment'] = data['tweet'].apply(lambda x: TextBlob(x).sentiment)
+        data['tweet_sentiment_polarity'] = data['tweet_sentiment'].apply(lambda x: x.polarity)
+        data['tweet_sentiment_subjectivity'] = data['tweet_sentiment'].apply(lambda x: x.subjectivity)
+        data.drop(columns=['tweet_sentiment'], inplace=True)
+
+        data = data[data['tweet_sentiment_polarity'] > 0]
+
         # Scrape stock ticker data
         stock_data = yf.download(stock, interval='1d', start=start_date)
 
@@ -88,14 +121,11 @@ def process_all_stocks(stock_tickers, start_date, min_likes, shift_range):
         output[stock] = out
 
     return output
-
-
-
     
 if __name__ == "__main__":
-    stock_tickers = ['TSLA']
-    start_date = datetime.strptime('2020-12-31')
-    output = process_all_stocks(stock_tickers, start_date, 100, 181)
+    stock_tickers = ['TSLA', 'AMD', 'IBM']
+    start_date = datetime.strptime('2020-12-01', '%Y-%m-%d')
+    output = process_all_stocks(stock_tickers, start_date, 100, 10)
 
     output = pd.DataFrame.from_dict(output)
     output.to_csv('tweet_correlations.csv')
