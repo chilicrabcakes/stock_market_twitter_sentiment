@@ -123,7 +123,7 @@ def process_all_stocks(stock_tickers, start_date, min_likes, shift_range):
     return output
     
 if __name__ == "__main__":
-    stock_tickers = ['TSLA', 'AMD', 'IBM']
+    stock_tickers = ['TSLA', 'PLTR', 'IBM']
     start_date = datetime.strptime('2020-12-01', '%Y-%m-%d')
     output = process_all_stocks(stock_tickers, start_date, 100, 10)
 
