@@ -17,7 +17,7 @@ from textblob import TextBlob
 from datetime import datetime, timedelta
 import plotly.express as px
 
-from check_hypothesis.py import base_processor
+from check_hypothesis import base_processor
 
 class ewm_processor(base_processor):
     def __init__(self):
@@ -30,7 +30,13 @@ class ewm_processor(base_processor):
         day_difference so that we compare past counts of tweets with a specific day's stock price. 
         It's a very hack-y function but this is EDA anyway, not performance coding.
 
-        In the cumulative mean class, we convert the daily number of tweets to a cumulative exponential
+        (ewm_processor changes)
+
+        Instead of correlation with count, we have added a weighted average of num of likes and sentiment.
+        This is a different way of viewing information, but we do need to include the number of tweets 
+        somehow in the future. 
+
+        In the inherited EWM class, we convert the daily number of tweets to a cumulative exponential 
         average (that gives bias to the nearer data point). This is supposed to smooth the data and
         present us with sentiment information over a period, rather than a single day.
 
@@ -49,30 +55,37 @@ class ewm_processor(base_processor):
         x = stock_data['Close']
 
         # Creates deep copy of tweets and shifts tweet dates by day_difference
-        data_f = data[['date','id']].copy(deep=True)
+        data_f = data[['date','tweet_sentiment_polarity']].copy(deep=True)
         data_f['datetime'] = data_f['date'].apply(lambda x: datetime.strptime(x, '%Y-%m-%d %H:%M:%S')) + timedelta(days=day_difference)
 
         # Strips datetime object into required date format
         data_f['date'] = data_f['datetime'].apply(lambda x: x.strftime("%Y-%m-%d"))
 
-        # Groups by date and gets averages for different values
-        num_tweets = data_f.groupby('date')['id'].count()
+        # Groups by date and gets weighted count by sentiment
+        # num_tweets = data_f.groupby('date')['id'].count()
+        data_f['count'] = 1
+        #weighted_sentiment = data_f.groupby('date').apply(lambda x: np.average(x['nlikes'], weights=x['tweet_sentiment_polarity']))
+        weighted_sentiment = data_f.groupby('date').apply(lambda x: x['count'].dot(x['tweet_sentiment_polarity']))
 
-        # Cumulative exponential mean
-        num_tweets['ewm'] = num_tweets['id'].ewm().mean()
-        num_tweets = num_tweets.to_frame().join(x, how='inner')
+        # Exponential weighted mean of the weighted sentiment
+        weighted_sentiment = weighted_sentiment.ewm(span=40, adjust=False).mean()
+        weighted_sentiment = weighted_sentiment.to_frame().join(x, how='inner')
 
         # Calculates Pearson's correlation coefficient
-        return np.corrcoef(num_tweets['ewm'], num_tweets['Close'])[0, 1]
+        return np.corrcoef(weighted_sentiment.iloc[:, 0], weighted_sentiment.iloc[:, 1])[0, 1]
 
 if __name__ == "__main__":
-    stock_tickers = {'NVDA' : 'Nvidia'}
-    start_date = datetime.strptime('2020-10-01', '%Y-%m-%d')
+    stock_tickers = {'PLTR' : 'Palantir'}
+    start_date = datetime.strptime('2020-01-01', '%Y-%m-%d')
     processor = ewm_processor()
-    output = processor.process_all_stocks(stock_tickers, start_date, 50, 0, 60)
+    output = processor.process_all_stocks(stock_tickers, start_date, 10, 0, 10)
 
     output = pd.DataFrame.from_dict(output)
     output.to_csv('tweet_correlations_ewm.csv')
+    fig = px.line(output, x=output.index, y=['PLTR'], title='Weighted Correlation between past tweets and stock price')
+    fig.update_xaxes(title_text='Days past',rangeslider_visible=True)
+    fig.update_yaxes(title_text='Correlation')
+    fig.show()
 
 
 
