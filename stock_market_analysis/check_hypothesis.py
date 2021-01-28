@@ -130,8 +130,10 @@ class base_processor:
             data['tweet_sentiment_subjectivity'] = data['tweet_sentiment'].apply(lambda x: x.subjectivity)
             data.drop(columns=['tweet_sentiment'], inplace=True)
 
+            data.to_csv('C:/Users/ayush/vs_code/stock_market_analysis/' + key + '_tweet_data.csv')
+
             # Keep ONLY positive tweets
-            data = data[data['tweet_sentiment_polarity'] > 0]
+            # data = data[data['tweet_sentiment_polarity'] > 0]
 
             # Scrape stock ticker data
             stock_data = yf.download(key, interval='1d', start=start_date)

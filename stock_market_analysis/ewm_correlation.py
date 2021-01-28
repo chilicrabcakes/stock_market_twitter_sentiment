@@ -75,14 +75,15 @@ class ewm_processor(base_processor):
         return np.corrcoef(weighted_sentiment.iloc[:, 0], weighted_sentiment.iloc[:, 1])[0, 1]
 
 if __name__ == "__main__":
-    stock_tickers = {'PLTR' : 'Palantir'}
-    start_date = datetime.strptime('2020-01-01', '%Y-%m-%d')
+
+    stock_tickers = {'GME' : 'GameStop'}
+    start_date = datetime.strptime('2020-11-01', '%Y-%m-%d')
     processor = ewm_processor()
-    output = processor.process_all_stocks(stock_tickers, start_date, 10, 0, 10)
+    output = processor.process_all_stocks(stock_tickers, start_date, 0, 0, 20)
 
     output = pd.DataFrame.from_dict(output)
     output.to_csv('tweet_correlations_ewm.csv')
-    fig = px.line(output, x=output.index, y=['PLTR'], title='Weighted Correlation between past tweets and stock price')
+    fig = px.line(output, x=output.index, y=['GME'], title='Weighted Correlation between past tweets and stock price')
     fig.update_xaxes(title_text='Days past',rangeslider_visible=True)
     fig.update_yaxes(title_text='Correlation')
     fig.show()
